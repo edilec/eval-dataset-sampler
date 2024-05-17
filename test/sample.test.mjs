@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { sampleDataset, TOOL_ID, RULE_SEVERITY } from '../src/index.mjs';
 
 const h = (c) => c.repeat(64);
@@ -108,8 +109,20 @@ test('unknown stratum outranks an independently known holdout collision', () => 
   assert.ok(report.findings.some((finding) => finding.ruleId === 'unknown-stratum'));
 });
 
-test('severity catalog is closed, and elapsed timeout uses injected clock', () => {
-  assert.equal(RULE_SEVERITY['holdout-id-collision'], 'error');
+test('severity catalog matches documentation, and elapsed timeout uses injected clock', async () => {
+  const expectedRules = [
+    'invalid-dataset', 'no-candidates', 'candidate-limit', 'holdout-limit',
+    'invalid-candidate', 'duplicate-candidate', 'invalid-holdout', 'duplicate-holdout',
+    'unknown-stratum', 'holdout-id-collision', 'holdout-source-collision', 'holdout-digest-collision',
+    'sample-shortage', 'quota-shortage', 'unreadable-dataset', 'parse-error', 'input-limit',
+    'invalid-evidence', 'timeout',
+  ];
+  assert.deepEqual(Object.keys(RULE_SEVERITY).sort(), [...expectedRules].sort());
+  assert.ok(Object.values(RULE_SEVERITY).every((severity) => severity === 'error'));
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const table = readme.split('## Rules, status, and exits')[1].split('The report uses')[0];
+  const documented = [...table.matchAll(/`([a-z][a-z-]*)`/gu)].map((match) => match[1]);
+  assert.deepEqual(documented.sort(), [...expectedRules].sort());
   const { dataset, plan } = base();
   const onBoundary = sampleDataset(dataset, plan, { timeoutMs: 10, now: (() => { let n = 0; return () => n++ === 0 ? 0 : 10; })() });
   assert.equal(onBoundary.status, 'pass');

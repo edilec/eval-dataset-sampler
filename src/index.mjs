@@ -11,7 +11,7 @@ export const RULE_SEVERITY = Object.freeze({
   'holdout-source-collision': 'error', 'holdout-digest-collision': 'error',
   'sample-shortage': 'error', 'quota-shortage': 'error',
   'unreadable-dataset': 'error', 'parse-error': 'error', 'input-limit': 'error',
-  timeout: 'error',
+  'invalid-evidence': 'error', timeout: 'error',
 });
 const MESSAGE = Object.freeze({
   'invalid-dataset': 'Dataset structure is incomplete or unsupported.',
@@ -31,6 +31,7 @@ const MESSAGE = Object.freeze({
   'unreadable-dataset': 'Named dataset could not be read within the root.',
   'parse-error': 'Named dataset is malformed or ambiguous JSON.',
   'input-limit': 'Named dataset exceeds an evidence limit.',
+  'invalid-evidence': 'Named dataset contains unsupported evidence.',
   timeout: 'Sampling exceeded its time limit.',
 });
 const compare = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
@@ -43,7 +44,7 @@ function validateOptions(options) {
   if (options.now !== undefined && typeof options.now !== 'function') throw new PlanConfigError('invalid-clock');
   if (options.timeoutMs !== undefined && (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)) throw new PlanConfigError('invalid-timeout');
   for (const key of ['datasetFile', 'planFile']) {
-    if (options[key] !== undefined && (typeof options[key] !== 'string' || options[key].length < 1 || options[key].length > 256 || options[key].startsWith('/') || options[key].includes('..') || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(options[key]))) throw new PlanConfigError('invalid-file-label');
+    if (options[key] !== undefined && (typeof options[key] !== 'string' || options[key].length < 1 || options[key].length > 256 || options[key].startsWith('/') || options[key].split(/[\\/]/u).includes('..') || /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(options[key]))) throw new PlanConfigError('invalid-file-label');
   }
 }
 
@@ -145,4 +146,9 @@ export function exitCodeFor(report) {
   if (report.status === 'pass') return 0;
   if (report.status === 'fail') return 1;
   return 2;
+}
+
+export function incompleteDatasetReport(ruleId, file = 'dataset.json') {
+  if (!['unreadable-dataset', 'parse-error', 'input-limit', 'invalid-evidence', 'timeout'].includes(ruleId)) throw new PlanConfigError('invalid-incomplete-rule');
+  return envelope('incomplete', null, [{ ruleId, file }]);
 }

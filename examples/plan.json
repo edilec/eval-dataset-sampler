@@ -1,0 +1,1 @@
+{"schemaVersion":1,"seed":"release-1","sampleSize":2,"targets":[{"risk":"high","category":"safety","priorFailureBand":"repeat","coverageTag":"rare","min":1},{"risk":"low","category":"qa","priorFailureBand":"none","coverageTag":"general","min":1}]}

@@ -52,5 +52,6 @@ test('invalid plan keys, duplicate targets and contradictory minima are configur
   assert.throws(() => validatePlan({ ...base, targets: [target({ min: 2 })] }), PlanConfigError);
   assert.throws(() => validatePlan({ ...base, sampleSize: 1001 }), PlanConfigError);
   assert.equal(validatePlan({ ...base, sampleSize: 1000 }).sampleSize, 1000);
+  assert.equal(validatePlan({ ...base, targets: Array.from({ length: 1000 }, (_, i) => target({ category: `c${i}`, risk: 'low', min: 0 })) }).targets.length, 1000);
   assert.throws(() => validatePlan({ ...base, targets: Array.from({ length: 1001 }, (_, i) => target({ category: `c${i}`, risk: 'low', min: 0 })) }), PlanConfigError);
 });
