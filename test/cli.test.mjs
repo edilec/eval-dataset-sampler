@@ -89,6 +89,25 @@ test('duplicate JSON keys and escaping symlink never yield a sample', async () =
   assert.equal(JSON.parse(escaped.stdout).status, 'incomplete');
 });
 
+test('rounded numeric dataset evidence is incomplete and rounded plan numbers are invalid configuration', async () => {
+  const data = dataset();
+  const p = plan();
+  p.targets[1].priorFailureBand = 'some';
+  const root = await fixture(data, p);
+  await writeFile(join(root, 'dataset.json'), JSON.stringify(data).replace('"priorFailures":0', '"priorFailures":0.999999999999999999999'));
+  const rounded = run(root);
+  assert.equal(rounded.status, 2);
+  assert.equal(JSON.parse(rounded.stdout).status, 'incomplete');
+  await writeFile(join(root, 'dataset.json'), JSON.stringify(data));
+  const one = { schemaVersion: 1, candidates: [data.candidates[0]], holdout: [] };
+  const onePlan = { schemaVersion: 1, seed: 'release-1', sampleSize: 1, targets: [p.targets[0]] };
+  await writeFile(join(root, 'dataset.json'), JSON.stringify(one));
+  await writeFile(join(root, 'plan.json'), JSON.stringify(onePlan).replace('"sampleSize":1', '"sampleSize":0.999999999999999999999'));
+  const badPlan = run(root);
+  assert.equal(badPlan.status, 2);
+  assert.equal(badPlan.stdout, '');
+});
+
 test('CLI limits accept exact N and mark N+1 incomplete', async () => {
   const root = await fixture();
   const bytes = Buffer.byteLength(JSON.stringify(dataset()));

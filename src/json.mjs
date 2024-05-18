@@ -15,6 +15,21 @@ function boundedInteger(value, fallback) {
   return value;
 }
 
+function canonicalDecimal(token) {
+  const match = token.match(/^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?)(\d+))?$/u);
+  if (!match) throw new JsonEvidenceError('numeric-precision');
+  const fractional = match[3] ?? '';
+  let digits = `${match[2]}${fractional}`.replace(/^0+/u, '');
+  if (digits === '') return '0';
+  const exponentDigits = (match[5] ?? '0').replace(/^0+/u, '') || '0';
+  if (exponentDigits.length > 6) throw new JsonEvidenceError('numeric-precision');
+  let exponent = BigInt(exponentDigits) * (match[4] === '-' ? -1n : 1n) - BigInt(fractional.length);
+  const trailing = digits.match(/0+$/u)?.[0].length ?? 0;
+  digits = digits.slice(0, digits.length - trailing);
+  exponent += BigInt(trailing);
+  return `${match[1]}${digits}e${exponent}`;
+}
+
 export function parseUniqueJson(text, options = {}) {
   if (typeof text !== 'string') throw new JsonEvidenceError('invalid-text');
   const maxDepth = boundedInteger(options.maxDepth, 16);
@@ -82,6 +97,7 @@ export function parseUniqueJson(text, options = {}) {
     if (!number) throw new JsonEvidenceError('malformed-json');
     const numeric = Number(number[0]);
     if (!Number.isFinite(numeric) || Math.abs(numeric) > Number.MAX_SAFE_INTEGER) throw new JsonEvidenceError('unsafe-number');
+    if (canonicalDecimal(number[0]) !== canonicalDecimal(numeric.toString())) throw new JsonEvidenceError('numeric-precision');
     i += number[0].length;
   };
   value(0);

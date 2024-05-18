@@ -20,6 +20,8 @@ The dataset is a UTF-8 JSON object with `schemaVersion: 1`, a nonempty `candidat
 
 `risk` is `high`, `medium`, or `low`. `category` and the **single** `coverageTag` are 1–64-character ASCII labels beginning with a letter or digit and otherwise using letters, digits, `_`, or `-`. `priorFailures` is a nonnegative safe integer. It maps to `none` at 0, `some` at 1–2, and `repeat` at 3 or more. One tag per candidate keeps coverage targets disjoint and makes quota feasibility exact, rather than heuristic. An unknown or malformed record is never treated as absent or compatible.
 
+Numeric JSON tokens must have the same exact decimal value as their parsed number's shortest round-trip decimal rendering. Legal spellings such as `1.0` and `3e-1` remain usable; a token rounded into an integer or underflowed to zero is refused before it can alter failure bands, sample sizes or quotas. This is a conservative evidence rule, not a claim of binary-exact arithmetic.
+
 The plan is a separate JSON object with `schemaVersion: 1`, an opaque `seed`, `sampleSize` of 1–1,000, and `targets`. Every observed four-axis stratum `(risk, category, priorFailureBand, coverageTag)` needs exactly one target with those four fields and a minimum `min`. A target with no observed stratum, or an observed stratum with no target, is incomplete. High-risk observed strata require `min >= 1`; other minima may be zero. Duplicate targets or minima summing above `sampleSize` are invalid configuration. A minimum beyond available candidates, or a sample larger than all candidates, is a known shortage and fails without a partial sample.
 
 ## Selection and holdout order

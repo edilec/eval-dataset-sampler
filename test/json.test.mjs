@@ -16,6 +16,12 @@ test('parser node and depth bounds accept N and refuse N+1', () => {
   assert.throws(() => parseUniqueJson('[1,2]', { maxNodes: 2 }), JsonEvidenceError);
   assert.throws(() => parseUniqueJson('[[1]]', { maxDepth: 1 }), JsonEvidenceError);
   assert.throws(() => parseUniqueJson('1e400'), JsonEvidenceError);
+  for (const rounded of ['0.999999999999999999999', '1e-400', '99999999999999999e-17']) {
+    assert.throws(() => parseUniqueJson(rounded), JsonEvidenceError, rounded);
+  }
+  assert.equal(parseUniqueJson('1.0'), 1);
+  assert.equal(parseUniqueJson('3e-1'), 0.3);
+  assert.equal(parseUniqueJson('9007199254740991'), Number.MAX_SAFE_INTEGER);
 });
 
 test('reader enforces bytes, strict UTF-8 and realpath confinement', async () => {
