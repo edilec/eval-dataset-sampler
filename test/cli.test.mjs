@@ -108,6 +108,36 @@ test('rounded numeric dataset evidence is incomplete and rounded plan numbers ar
   assert.equal(badPlan.stdout, '');
 });
 
+test('large exact decimal cancellation is legal in dataset and plan at N bytes but N+1 is refused', async () => {
+  const token = `1${'0'.repeat(1_000_000)}e-1000000`;
+  const data = dataset();
+  const p = plan();
+  p.targets[1].priorFailureBand = 'some';
+  const root = await fixture(data, p);
+  const datasetText = JSON.stringify(data).replace('"priorFailures":0', `"priorFailures":${token}`);
+  await writeFile(join(root, 'dataset.json'), datasetText);
+  const exactDataset = run(root, ['--max-bytes', String(Buffer.byteLength(datasetText))]);
+  assert.equal(exactDataset.status, 0, exactDataset.stderr);
+  assert.equal(JSON.parse(exactDataset.stdout).status, 'pass');
+  await writeFile(join(root, 'dataset.json'), `${datasetText} `);
+  const overDataset = run(root, ['--max-bytes', String(Buffer.byteLength(datasetText))]);
+  assert.equal(overDataset.status, 2);
+  assert.equal(JSON.parse(overDataset.stdout).findings[0].ruleId, 'input-limit');
+
+  const one = { schemaVersion: 1, candidates: [data.candidates[0]], holdout: [] };
+  const onePlan = { schemaVersion: 1, seed: 'release-1', sampleSize: 1, targets: [plan().targets[0]] };
+  await writeFile(join(root, 'dataset.json'), JSON.stringify(one));
+  const planText = JSON.stringify(onePlan).replace('"sampleSize":1', `"sampleSize":${token}`);
+  await writeFile(join(root, 'plan.json'), planText);
+  const exactPlan = run(root, ['--max-bytes', String(Buffer.byteLength(planText))]);
+  assert.equal(exactPlan.status, 0, exactPlan.stderr);
+  assert.equal(JSON.parse(exactPlan.stdout).status, 'pass');
+  await writeFile(join(root, 'plan.json'), `${planText} `);
+  const overPlan = run(root, ['--max-bytes', String(Buffer.byteLength(planText))]);
+  assert.equal(overPlan.status, 2);
+  assert.equal(overPlan.stdout, '');
+});
+
 test('CLI limits accept exact N and mark N+1 incomplete', async () => {
   const root = await fixture();
   const bytes = Buffer.byteLength(JSON.stringify(dataset()));

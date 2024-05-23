@@ -22,7 +22,11 @@ function canonicalDecimal(token) {
   let digits = `${match[2]}${fractional}`.replace(/^0+/u, '');
   if (digits === '') return '0';
   const exponentDigits = (match[5] ?? '0').replace(/^0+/u, '') || '0';
-  if (exponentDigits.length > 6) throw new JsonEvidenceError('numeric-precision');
+  const largestRelevantExponent = String(token.length + 324);
+  if (exponentDigits.length > largestRelevantExponent.length ||
+      (exponentDigits.length === largestRelevantExponent.length && exponentDigits > largestRelevantExponent)) {
+    throw new JsonEvidenceError('numeric-precision');
+  }
   let exponent = BigInt(exponentDigits) * (match[4] === '-' ? -1n : 1n) - BigInt(fractional.length);
   const trailing = digits.match(/0+$/u)?.[0].length ?? 0;
   digits = digits.slice(0, digits.length - trailing);

@@ -24,6 +24,11 @@ test('parser node and depth bounds accept N and refuse N+1', () => {
   assert.equal(parseUniqueJson('9007199254740991'), Number.MAX_SAFE_INTEGER);
 });
 
+test('a million decimal zeros can cancel a seven-digit exponent exactly', () => {
+  const token = `1${'0'.repeat(1_000_000)}e-1000000`;
+  assert.equal(parseUniqueJson(token), 1);
+});
+
 test('reader enforces bytes, strict UTF-8 and realpath confinement', async () => {
   const root = await mkdtemp(join(tmpdir(), 'edilec-sampler-root-'));
   const outside = await mkdtemp(join(tmpdir(), 'edilec-sampler-outside-'));
