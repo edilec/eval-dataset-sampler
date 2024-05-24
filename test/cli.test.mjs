@@ -35,6 +35,43 @@ test('correct saved dataset passes and reproduces the same selected IDs', async 
   assert.equal(await readFile(join(root, 'dataset.json'), 'utf8'), JSON.stringify(dataset()));
 });
 
+test('CLI help and fixed human summary accompany default JSON, while --json is quiet', async () => {
+  const help = spawnSync(process.execPath, [bin, '--help'], { encoding: 'utf8' });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /^Usage: eval-dataset-sampler /u);
+  assert.match(help.stdout, /--dataset FILE/u);
+  assert.equal(help.stderr, '');
+  const root = await fixture();
+  const good = run(root);
+  assert.equal(good.status, 0);
+  assert.equal(JSON.parse(good.stdout).status, 'pass');
+  assert.equal(good.stderr, 'Evaluation dataset sampler: PASS; 0 findings.\n');
+  const quiet = run(root, ['--json']);
+  assert.equal(quiet.status, 0);
+  assert.equal(quiet.stdout, good.stdout);
+  assert.equal(quiet.stderr, '');
+  const leaking = dataset();
+  leaking.holdout.push({ id: 'held', sourceId: 'src-held', contentSha256: hash('a') });
+  await writeFile(join(root, 'dataset.json'), JSON.stringify(leaking));
+  const fail = run(root);
+  assert.equal(fail.status, 1);
+  assert.equal(JSON.parse(fail.stdout).status, 'fail');
+  assert.equal(fail.stderr, 'Evaluation dataset sampler: FAIL; 1 finding.\n');
+  await writeFile(join(root, 'dataset.json'), '{"schemaVersion":');
+  const incomplete = run(root);
+  assert.equal(incomplete.status, 2);
+  assert.equal(JSON.parse(incomplete.stdout).status, 'incomplete');
+  assert.equal(incomplete.stderr, 'Evaluation dataset sampler: INCOMPLETE; 1 finding.\n');
+  const quietIncomplete = run(root, ['--json']);
+  assert.equal(quietIncomplete.status, 2);
+  assert.equal(quietIncomplete.stdout, incomplete.stdout);
+  assert.equal(quietIncomplete.stderr, '');
+  const invalid = run(root, ['--json', '--not-an-option']);
+  assert.equal(invalid.status, 2);
+  assert.equal(invalid.stdout, '');
+  assert.equal(invalid.stderr, '');
+});
+
 test('a legal local filename containing two dots is not falsely refused', async () => {
   const root = await fixture();
   await writeFile(join(root, 'data..json'), JSON.stringify(dataset()));

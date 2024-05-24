@@ -9,10 +9,11 @@ Node 22+ is required. There is no install step, package dependency, network call
 ```sh
 node bin/eval-dataset-sampler.mjs --root examples --dataset clean.dataset.json --plan plan.json
 node bin/eval-dataset-sampler.mjs --root examples --dataset leak.dataset.json --plan plan.json
+node bin/eval-dataset-sampler.mjs --help
 npm run check
 ```
 
-The clean example exits 0 with `status: pass` and two selected IDs. The leak example exits 1 with `status: fail` and an empty sample. CLI stdout contains one JSON report for completed or incomplete dataset checks. Import `sampleDataset`, `TOOL_ID`, `RULE_SEVERITY`, or `exitCodeFor` from `src/index.mjs`; file-based callers can import `checkSample` from `src/check.mjs`. Both accept an injected `now` clock function, defaulting to `Date.now`.
+The clean check exits 0 with `status: pass` and two selected IDs. The leak check exits 1 with `status: fail` and an empty sample. Completed and incomplete dataset checks emit one JSON report on stdout and a fixed, human-readable status and finding count on stderr. Add `--json` for JSON-only output with no stderr summary; invalid configuration still leaves stdout empty. `--help` alone prints usage and exits 0. The summary contains no input values or identifiers. Import `sampleDataset`, `TOOL_ID`, `RULE_SEVERITY`, or `exitCodeFor` from `src/index.mjs`; file-based callers can import `checkSample` from `src/check.mjs`. Both accept an injected `now` clock function, defaulting to `Date.now`.
 
 ## Dataset and plan
 
