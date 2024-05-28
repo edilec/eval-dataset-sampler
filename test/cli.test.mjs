@@ -69,7 +69,7 @@ test('CLI help and fixed human summary accompany default JSON, while --json is q
   const invalid = run(root, ['--json', '--not-an-option']);
   assert.equal(invalid.status, 2);
   assert.equal(invalid.stdout, '');
-  assert.equal(invalid.stderr, '');
+  assert.equal(invalid.stderr, 'Invalid configuration or execution failure.\n');
 });
 
 test('a legal local filename containing two dots is not falsely refused', async () => {

@@ -59,6 +59,6 @@ try {
     process.exitCode = exitCodeFor(report);
   }
 } catch {
-  if (!process.argv.slice(2).includes('--json')) process.stderr.write('Invalid configuration or execution failure.\n');
+  process.stderr.write('Invalid configuration or execution failure.\n');
   process.exitCode = 2;
 }
