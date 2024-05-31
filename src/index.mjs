@@ -11,7 +11,7 @@ export const RULE_SEVERITY = Object.freeze({
   'holdout-source-collision': 'error', 'holdout-digest-collision': 'error',
   'sample-shortage': 'error', 'quota-shortage': 'error',
   'unreadable-dataset': 'error', 'parse-error': 'error', 'input-limit': 'error',
-  'invalid-evidence': 'error', timeout: 'error',
+  'invalid-evidence': 'error', timeout: 'error', 'report-write-error': 'error',
 });
 const MESSAGE = Object.freeze({
   'invalid-dataset': 'Dataset structure is incomplete or unsupported.',
@@ -33,6 +33,7 @@ const MESSAGE = Object.freeze({
   'input-limit': 'Named dataset exceeds an evidence limit.',
   'invalid-evidence': 'Named dataset contains unsupported evidence.',
   timeout: 'Sampling exceeded its time limit.',
+  'report-write-error': 'The named report destination could not be written safely.',
 });
 const compare = (a, b) => (a === b ? 0 : a < b ? -1 : 1);
 
@@ -151,4 +152,8 @@ export function exitCodeFor(report) {
 export function incompleteDatasetReport(ruleId, file = 'dataset.json') {
   if (!['unreadable-dataset', 'parse-error', 'input-limit', 'invalid-evidence', 'timeout'].includes(ruleId)) throw new PlanConfigError('invalid-incomplete-rule');
   return envelope('incomplete', null, [{ ruleId, file }]);
+}
+
+export function reportWriteFailure() {
+  return envelope('incomplete', null, [{ ruleId: 'report-write-error', file: '(report)' }]);
 }

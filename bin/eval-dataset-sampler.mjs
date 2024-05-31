@@ -1,9 +1,12 @@
 #!/usr/bin/env node
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { checkSample } from '../src/check.mjs';
-import { exitCodeFor } from '../src/index.mjs';
+import { exitCodeFor, reportWriteFailure } from '../src/index.mjs';
+import { assertWritableDestination } from '../src/write-guard.mjs';
 
 const flags = Object.freeze({
-  '--root': 'root', '--dataset': 'dataset', '--plan': 'plan',
+  '--root': 'root', '--dataset': 'dataset', '--plan': 'plan', '--report': 'report',
   '--max-bytes': 'maxBytes', '--max-nodes': 'maxNodes', '--max-depth': 'maxDepth',
   '--max-candidates': 'maxCandidates', '--max-holdout': 'maxHoldout',
   '--timeout-ms': 'timeoutMs',
@@ -13,6 +16,7 @@ const help = `Usage: eval-dataset-sampler --root DIR --dataset FILE --plan FILE 
 
 Read a saved evaluation dataset and plan; write a JSON report to stdout.
 Options:
+  --report FILE                Also write the JSON report to this path under root.
   --max-bytes N  --max-nodes N  --max-depth N  --max-candidates N
   --max-holdout N  --timeout-ms N
   --json                     Suppress the human summary on stderr.
@@ -35,6 +39,7 @@ function parseArgs(args) {
     if (!key || seen.has(flag) || args[i + 1] === undefined || args[i + 1].startsWith('--')) throw new Error('invalid option');
     seen.add(flag);
     const value = args[++i];
+    if (key === 'report' && value.length === 0) throw new Error('invalid report path');
     if (numeric.has(key)) {
       if (!/^(?:0|[1-9]\d*)$/u.test(value)) throw new Error('invalid limit');
       options.limits[key] = Number(value);
@@ -48,8 +53,18 @@ try {
   if (args.length === 1 && args[0] === '--help') {
     process.stdout.write(help);
   } else {
-    const { jsonOnly, ...options } = parseArgs(args);
-    const report = await checkSample(options);
+    const { jsonOnly, report: reportPath, ...options } = parseArgs(args);
+    let report = await checkSample(options);
+    if (reportPath !== undefined) {
+      const root = resolve(options.root);
+      const inputs = [options.dataset, options.plan].map((path) => resolve(root, path));
+      try {
+        const destination = await assertWritableDestination(resolve(root, reportPath), { root, inputs, label: '--report' });
+        await writeFile(destination, `${JSON.stringify(report)}\n`, 'utf8');
+      } catch {
+        report = reportWriteFailure();
+      }
+    }
     process.stdout.write(`${JSON.stringify(report)}\n`);
     if (!jsonOnly) {
       const count = report.findings.length;

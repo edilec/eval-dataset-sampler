@@ -115,7 +115,7 @@ test('severity catalog matches documentation, and elapsed timeout uses injected 
     'invalid-candidate', 'duplicate-candidate', 'invalid-holdout', 'duplicate-holdout',
     'unknown-stratum', 'holdout-id-collision', 'holdout-source-collision', 'holdout-digest-collision',
     'sample-shortage', 'quota-shortage', 'unreadable-dataset', 'parse-error', 'input-limit',
-    'invalid-evidence', 'timeout',
+    'invalid-evidence', 'timeout', 'report-write-error',
   ];
   assert.deepEqual(Object.keys(RULE_SEVERITY).sort(), [...expectedRules].sort());
   assert.ok(Object.values(RULE_SEVERITY).every((severity) => severity === 'error'));

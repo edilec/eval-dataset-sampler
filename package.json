@@ -14,7 +14,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "node --check src/json.mjs && node --check src/validate.mjs && node --check src/index.mjs && node --check src/check.mjs && node --check bin/eval-dataset-sampler.mjs",
+    "lint": "node --check src/json.mjs && node --check src/validate.mjs && node --check src/index.mjs && node --check src/check.mjs && node --check src/write-guard.mjs && node --check bin/eval-dataset-sampler.mjs",
     "test": "node --test",
     "check": "npm run lint && npm test"
   },

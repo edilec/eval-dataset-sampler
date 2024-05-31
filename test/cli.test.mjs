@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, symlink, link, mkdir, access, unlink, readlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,6 +70,141 @@ test('CLI help and fixed human summary accompany default JSON, while --json is q
   assert.equal(invalid.status, 2);
   assert.equal(invalid.stdout, '');
   assert.equal(invalid.stderr, 'Invalid configuration or execution failure.\n');
+});
+
+test('named sampler report writes identical JSON bytes to safe new, existing and in-root alias destinations', async () => {
+  const root = await fixture();
+  const beforeDataset = await readFile(join(root, 'dataset.json'), 'utf8');
+  const beforePlan = await readFile(join(root, 'plan.json'), 'utf8');
+  const first = run(root, ['--report', 'report.json']);
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(JSON.parse(first.stdout).status, 'pass');
+  assert.equal(await readFile(join(root, 'report.json'), 'utf8'), first.stdout);
+  await writeFile(join(root, 'report.json'), 'synthetic old report');
+  const existing = run(root, ['--report', 'report.json', '--json']);
+  assert.equal(existing.status, 0, existing.stderr);
+  assert.equal(existing.stderr, '');
+  assert.equal(await readFile(join(root, 'report.json'), 'utf8'), existing.stdout);
+  await mkdir(join(root, 'reports'));
+  await symlink('reports', join(root, 'alias'));
+  const alias = run(root, ['--report', 'alias/report.json']);
+  assert.equal(alias.status, 0, alias.stderr);
+  assert.equal(await readFile(join(root, 'reports', 'report.json'), 'utf8'), alias.stdout);
+  assert.equal(await readFile(join(root, 'dataset.json'), 'utf8'), beforeDataset);
+  assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+});
+
+test('named sampler report byte bound allows N and writes incomplete at N+1', async () => {
+  const root = await fixture();
+  const data = await readFile(join(root, 'dataset.json'), 'utf8');
+  const planText = await readFile(join(root, 'plan.json'), 'utf8');
+  assert.ok(Buffer.byteLength(data) > Buffer.byteLength(planText));
+  const exact = run(root, ['--max-bytes', String(Buffer.byteLength(data)), '--report', 'report.json']);
+  assert.equal(exact.status, 0, exact.stderr);
+  assert.equal(await readFile(join(root, 'report.json'), 'utf8'), exact.stdout);
+  await writeFile(join(root, 'dataset.json'), `${data} `);
+  const over = run(root, ['--max-bytes', String(Buffer.byteLength(data)), '--report', 'report.json']);
+  assert.equal(over.status, 2);
+  assert.equal(JSON.parse(over.stdout).status, 'incomplete');
+  assert.equal(JSON.parse(over.stdout).findings[0].ruleId, 'input-limit');
+  assert.equal(await readFile(join(root, 'report.json'), 'utf8'), over.stdout);
+  assert.equal(await readFile(join(root, 'dataset.json'), 'utf8'), `${data} `);
+});
+
+test('named sampler report refuses destination and escaping parent symlinks without changing evidence or outside files', async () => {
+  const root = await fixture();
+  const outside = await mkdtemp(join(tmpdir(), 'edilec-sampler-report-outside-'));
+  const outsideFile = join(outside, 'untouched.json');
+  await writeFile(outsideFile, 'synthetic protected outside file');
+  const beforeDataset = await readFile(join(root, 'dataset.json'), 'utf8');
+  const beforePlan = await readFile(join(root, 'plan.json'), 'utf8');
+  await symlink(outsideFile, join(root, 'linked-report.json'));
+  const direct = run(root, ['--report', 'linked-report.json']);
+  assert.equal(await readFile(outsideFile, 'utf8'), 'synthetic protected outside file');
+  assert.equal(direct.status, 2);
+  assert.equal(JSON.parse(direct.stdout).status, 'incomplete');
+  assert.equal(JSON.parse(direct.stdout).findings[0].ruleId, 'report-write-error');
+  assert.deepEqual(JSON.parse(direct.stdout).sample, []);
+  await symlink(outside, join(root, 'outside-parent'));
+  const parent = run(root, ['--report', 'outside-parent/report.json']);
+  await assert.rejects(access(join(outside, 'report.json')));
+  assert.equal(parent.status, 2);
+  assert.equal(JSON.parse(parent.stdout).findings[0].ruleId, 'report-write-error');
+  const missingParent = run(root, ['--report', 'missing-parent/report.json']);
+  assert.equal(missingParent.status, 2);
+  assert.equal(JSON.parse(missingParent.stdout).findings[0].ruleId, 'report-write-error');
+  assert.equal(await readFile(join(root, 'dataset.json'), 'utf8'), beforeDataset);
+  assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+});
+
+test('named sampler report refuses hard links to both inputs and an absent input path alias', async () => {
+  for (const input of ['dataset.json', 'plan.json']) {
+    const root = await fixture();
+    const inputs = ['dataset.json', 'plan.json'];
+    const before = await Promise.all(inputs.map((file) => readFile(join(root, file), 'utf8')));
+    await link(join(root, input), join(root, 'report.json'));
+    const refused = run(root, ['--report', 'report.json']);
+    for (let i = 0; i < inputs.length; i += 1) assert.equal(await readFile(join(root, inputs[i]), 'utf8'), before[i], `${input} altered ${inputs[i]}`);
+    assert.equal(refused.status, 2, input);
+    const report = JSON.parse(refused.stdout);
+    assert.equal(report.status, 'incomplete');
+    assert.equal(report.findings[0].ruleId, 'report-write-error');
+    assert.deepEqual(report.sample, []);
+  }
+  const root = await fixture();
+  const beforePlan = await readFile(join(root, 'plan.json'), 'utf8');
+  await unlink(join(root, 'dataset.json'));
+  const absent = run(root, ['--report', 'dataset.json']);
+  assert.equal(absent.status, 2);
+  assert.equal(JSON.parse(absent.stdout).findings[0].ruleId, 'report-write-error');
+  await assert.rejects(access(join(root, 'dataset.json')));
+  await mkdir(join(root, 'real'));
+  await symlink('real', join(root, 'alias'));
+  const alias = spawnSync(process.execPath, [bin, '--root', root, '--dataset', 'alias/absent.json', '--plan', 'plan.json', '--report', 'real/absent.json'], { encoding: 'utf8' });
+  assert.equal(alias.status, 2);
+  assert.equal(JSON.parse(alias.stdout).findings[0].ruleId, 'report-write-error');
+  await assert.rejects(access(join(root, 'real', 'absent.json')));
+  assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+});
+
+test('named sampler report refuses a dangling multi-hop input alias but accepts a distinct absent input', async () => {
+  const root = await fixture();
+  const beforePlan = await readFile(join(root, 'plan.json'), 'utf8');
+  await unlink(join(root, 'dataset.json'));
+  await symlink('hop.json', join(root, 'dataset.json'));
+  await symlink('report.json', join(root, 'hop.json'));
+  const alias = run(root, ['--report', 'report.json']);
+  assert.equal(await readlink(join(root, 'dataset.json')), 'hop.json');
+  assert.equal(await readlink(join(root, 'hop.json')), 'report.json');
+  await assert.rejects(access(join(root, 'report.json')));
+  assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+  assert.equal(alias.status, 2);
+  assert.equal(JSON.parse(alias.stdout).findings[0].ruleId, 'report-write-error');
+  await unlink(join(root, 'dataset.json'));
+  await unlink(join(root, 'hop.json'));
+  const distinct = run(root, ['--report', 'report.json']);
+  assert.equal(distinct.status, 2);
+  assert.equal(JSON.parse(distinct.stdout).findings[0].ruleId, 'unreadable-dataset');
+  assert.equal(await readFile(join(root, 'report.json'), 'utf8'), distinct.stdout);
+  assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+  await assert.rejects(access(join(root, 'dataset.json')));
+});
+
+test('invalid sampler configuration never writes a named report', async () => {
+  const root = await fixture();
+  const beforeDataset = await readFile(join(root, 'dataset.json'), 'utf8');
+  await writeFile(join(root, 'plan.json'), '{"schemaVersion":');
+  const beforePlan = await readFile(join(root, 'plan.json'), 'utf8');
+  const badPlan = run(root, ['--report', 'report.json']);
+  assert.equal(badPlan.status, 2);
+  assert.equal(badPlan.stdout, '');
+  await assert.rejects(access(join(root, 'report.json')));
+  const badArgs = run(root, ['--report', 'report.json', '--unknown']);
+  assert.equal(badArgs.status, 2);
+  assert.equal(badArgs.stdout, '');
+  await assert.rejects(access(join(root, 'report.json')));
+  assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+  assert.equal(await readFile(join(root, 'dataset.json'), 'utf8'), beforeDataset);
 });
 
 test('a legal local filename containing two dots is not falsely refused', async () => {

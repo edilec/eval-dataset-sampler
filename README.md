@@ -9,11 +9,12 @@ Node 22+ is required. There is no install step, package dependency, network call
 ```sh
 node bin/eval-dataset-sampler.mjs --root examples --dataset clean.dataset.json --plan plan.json
 node bin/eval-dataset-sampler.mjs --root examples --dataset leak.dataset.json --plan plan.json
+node bin/eval-dataset-sampler.mjs --root examples --dataset clean.dataset.json --plan plan.json --report sample.report.json
 node bin/eval-dataset-sampler.mjs --help
 npm run check
 ```
 
-The clean check exits 0 with `status: pass` and two selected IDs. The leak check exits 1 with `status: fail` and an empty sample. Completed and incomplete dataset checks emit one JSON report on stdout and a fixed, human-readable status and finding count on stderr. Add `--json` to suppress only that human report summary; invalid configuration still leaves stdout empty and emits a fixed diagnostic on stderr. `--help` alone prints usage and exits 0. The summary contains no input values or identifiers. Import `sampleDataset`, `TOOL_ID`, `RULE_SEVERITY`, or `exitCodeFor` from `src/index.mjs`; file-based callers can import `checkSample` from `src/check.mjs`. Both accept an injected `now` clock function, defaulting to `Date.now`.
+The clean check exits 0 with `status: pass` and two selected IDs. The leak check exits 1 with `status: fail` and an empty sample. Completed and incomplete dataset checks emit one JSON report on stdout and a fixed, human-readable status and finding count on stderr. Add `--json` to suppress only that human report summary; invalid configuration still leaves stdout empty and emits a fixed diagnostic on stderr. `--help` alone prints usage and exits 0. The summary contains no input values or identifiers. Optional `--report FILE` writes the same JSON bytes to a named file under the declared root; without it, no file is written. Import `sampleDataset`, `TOOL_ID`, `RULE_SEVERITY`, or `exitCodeFor` from `src/index.mjs`; file-based callers can import `checkSample` from `src/check.mjs`. Both accept an injected `now` clock function, defaulting to `Date.now`.
 
 ## Dataset and plan
 
@@ -37,6 +38,7 @@ Within each stratum, candidates rank by SHA-256 of the JSON tuple `[seed,id,sour
 | --- | --- | --- |
 | `invalid-dataset`, `no-candidates`, `invalid-candidate`, `duplicate-candidate`, `invalid-holdout`, `duplicate-holdout` | error | Required or unambiguous dataset evidence is missing. |
 | `candidate-limit`, `holdout-limit`, `input-limit`, `unreadable-dataset`, `parse-error`, `invalid-evidence`, `timeout` | error | Dataset could not be fully evaluated. |
+| `report-write-error` | error | Optional report file could not be written safely; `status: incomplete`. |
 | `unknown-stratum` | error | Dataset and plan strata do not match exactly. |
 | `holdout-id-collision`, `holdout-source-collision`, `holdout-digest-collision` | error | A candidate crosses the holdout boundary. |
 | `sample-shortage`, `quota-shortage` | error | Complete evidence proves the requested coverage is unavailable. |
@@ -49,12 +51,15 @@ The report uses `schemaVersion: "1"`, `tool`, `status`, `summary`, deterministic
 | 1 | Proven holdout leak or shortage | JSON report, `status: fail`. |
 | 2 | Invalid CLI or plan configuration | Empty; fixed stderr diagnostic. |
 | 2 | Unreadable, malformed, incomplete or over-limit dataset | JSON report, `status: incomplete`. |
+| 2 | Named report destination refused or unwritable | JSON report, `status: incomplete`, no sample or success claim. |
 
 ## Limits and local read boundary
 
 Default limits: 1,048,576 bytes **per file**, 10,000 candidates, 10,000 holdout entries, 100,000 JSON nodes, nesting depth 16, 1,000 plan targets, 1,000 selected records, and a cooperative 30,000 ms timeout. CLI overrides are `--max-bytes`, `--max-candidates`, `--max-holdout`, `--max-nodes`, `--max-depth`, and `--timeout-ms`; corresponding programmatic `limits` keys have the same names. Unknown limit keys are rejected. Exact N is admitted and N+1 refused: an exceeded dataset bound is incomplete, and an exceeded plan bound is invalid configuration.
 
-Duplicate JSON object keys are rejected before parsing can erase an earlier value. Text is decoded as strict UTF-8. Both file paths are resolved under the real declared root; an in-root symlink is accepted and one escaping the root is refused. The tool reads only local files, writes no file, and never connects to a database, model, browser or network.
+Duplicate JSON object keys are rejected before parsing can erase an earlier value. Text is decoded as strict UTF-8. Both input paths are resolved under the real declared root; an in-root symlink is accepted and one escaping the root is refused. The tool reads only local files, writes no file unless `--report` is named, and never connects to a database, model, browser or network.
+
+Only `--report` enables a file write. Its destination must remain under the real root. A symlink at the destination, an escaping parent symlink, or a hard link to **either** named input (dataset or plan) is refused. A report path equal to a named input, including through a dangling symlink chain, is refused even when that input's target is absent. Safe existing report files may be replaced. A refused or failed write leaves stdout as an incomplete report with a fixed `report-write-error` finding and no sample; invalid CLI/plan configuration writes nothing.
 
 ## Non-goals
 
