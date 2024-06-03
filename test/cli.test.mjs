@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, symlink, link, mkdir, access, unlink, readlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, symlink, link, mkdir, access, unlink, readlink, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -188,6 +188,27 @@ test('named sampler report refuses a dangling multi-hop input alias but accepts 
   assert.equal(await readFile(join(root, 'report.json'), 'utf8'), distinct.stdout);
   assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
   await assert.rejects(access(join(root, 'dataset.json')));
+});
+
+test('an actual sampler report write failure becomes incomplete with no sample or altered evidence', async () => {
+  const root = await fixture();
+  const destination = join(root, 'report.json');
+  await writeFile(destination, 'synthetic old report');
+  await chmod(destination, 0o444);
+  const beforeDataset = await readFile(join(root, 'dataset.json'), 'utf8');
+  const beforePlan = await readFile(join(root, 'plan.json'), 'utf8');
+  try {
+    const failed = run(root, ['--report', 'report.json']);
+    assert.equal(await readFile(destination, 'utf8'), 'synthetic old report');
+    assert.equal(await readFile(join(root, 'dataset.json'), 'utf8'), beforeDataset);
+    assert.equal(await readFile(join(root, 'plan.json'), 'utf8'), beforePlan);
+    assert.equal(failed.status, 2);
+    assert.equal(JSON.parse(failed.stdout).status, 'incomplete');
+    assert.equal(JSON.parse(failed.stdout).findings[0].ruleId, 'report-write-error');
+    assert.deepEqual(JSON.parse(failed.stdout).sample, []);
+  } finally {
+    await chmod(destination, 0o644);
+  }
 });
 
 test('invalid sampler configuration never writes a named report', async () => {
